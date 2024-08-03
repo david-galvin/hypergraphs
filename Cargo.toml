@@ -1,0 +1,21 @@
+[package]
+name = "hypergraphs2"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+smallvec = "1.9.0"
+bitvec_simd = "0.20"
+fastrand = "1.8.0"
+math = { path  = "../math" }
+rustc-hash = "2.0.0"
+rayon = "1.10.0"
+
+[profile.release]
+debug = 1
+
+[rust]
+debuginfo-level = 1
+
+[build]
+rustflags = ["-C", "symbol-mangling-version=v0"]

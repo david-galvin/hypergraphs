@@ -1,0 +1,27 @@
+# Compiled files
+/target/
+**/*.rs.bk
+
+# Remove generated files (by programs such as perf)
+*.svg
+*.data
+*.old
+*.log
+
+# Ignore files created by the `cargo test` command
+*.log
+
+# Ignore the compiled `Cargo.lock` file (including /target/ in line above)
+/Cargo.lock
+
+# Dependencies
+/.vscode/
+/node_modules/
+
+# Ignore the output of `cargo clippy`
+clippy.toml
+
+# Miscellaneous
+.DS_Store
+*.tmp
+*.swp
