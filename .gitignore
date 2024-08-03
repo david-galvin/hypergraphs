@@ -25,3 +25,5 @@ clippy.toml
 .DS_Store
 *.tmp
 *.swp
+*.save
+
