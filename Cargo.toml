@@ -13,9 +13,3 @@ rayon = "1.10.0"
 
 [profile.release]
 debug = 1
-
-[rust]
-debuginfo-level = 1
-
-[build]
-rustflags = ["-C", "symbol-mangling-version=v0"]
