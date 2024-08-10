@@ -19,6 +19,7 @@ use std::env;
 // TODO Grow a graph by:
 //        a) cloning a vertex, and only randomizing the other new edges (having the cloned vertex and its clone as two nodes of the edge)
 //        b) creating a new vertex and only randomizing new edge colors.
+// TODO Develop a likely-unique signature for each graph, based on its degree & clique sequence be color (count of degrees, count of cliques)
 
 fn main() {
   // Get user inputs. Since we use f_{edge order}(color_count, graph_order) in the paper, we'll preserve this ordering
