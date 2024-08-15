@@ -223,7 +223,7 @@ impl HyperGraph {
   fn random_clique_growth(&mut self) {
 	// TODO Ensure clique doesn't contain all vertices.
 	
-	// TODO Pick random vertex  vnot in clique
+	// TODO Pick random vertex v not in clique
 	
 	// TODO color all edges between every set of r-1 of the clique's vertices & v
 	//      with the clique's color.
