@@ -6,6 +6,7 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::fmt;
 use std::env;
+use std::time::{Duration, Instant};
 //use smallvec::{smallvec, SmallVec}; // https://docs.rs/smallvec/1.10.0/smallvec/struct.SmallVec.html
 
 
@@ -20,8 +21,10 @@ use std::env;
 //        a) cloning a vertex, and only randomizing the other new edges (having the cloned vertex and its clone as two nodes of the edge)
 //        b) creating a new vertex and only randomizing new edge colors.
 // TODO Develop a likely-unique signature for each graph, based on its degree & clique sequence be color (count of degrees, count of cliques)
+// println!("Time elapsed: {:?}", start.elapsed());
 
 fn main() {
+  let start = Instant::now();
   // Get user inputs. Since we use f_{edge order}(color_count, graph_order) in the paper, we'll preserve this ordering
   let args: Vec<String> = env::args().collect();
   if args.len() < 3 {
@@ -132,12 +135,13 @@ fn main() {
           ((h.maximal_color_clique_ct == best_from_all_starts) && h.maximal_color_clique_ct <= upper_bound) {
             
             println!(
-              "\n------------------------------------------\n\n{}.\n\nIMPROVEMENT: {} -> {} (flipped edge {}). Annealings: {}", 
+              "\n------------------------------------------\n\n{}.\n\nIMPROVEMENT: {} -> {} (flipped edge {}). Annealings: {}, Time: {:?}", 
               threshold_str, 
               best_from_all_starts, 
               h.maximal_color_clique_ct,
               edge_index_to_try, 
-              annealing_count);
+              annealing_count,
+              start.elapsed());
             
             best_from_all_starts = h.maximal_color_clique_ct;
             println!("{}", h);
@@ -165,7 +169,7 @@ fn main() {
        (annealing_count <= 10000000 && annealing_count % 100000 == 0) ||
        (annealing_count <= 100000000 && annealing_count % 1000000 == 0) ||
        (annealing_count >  100000000 && annealing_count % 10000000 == 0) {
-      println!("annealings: {}", annealing_count);
+      println!("annealings: {}, Time: {:?}", annealing_count, start.elapsed());
     }
   }
 }
@@ -213,6 +217,28 @@ impl HyperGraph {
   fn randomize_colors(&mut self) {
     for i in 0..=self.last_random_edge_index {
       self.edges[i].set_color(fastrand::u8(0..self.color_ct));
+    }
+  }
+  
+  fn random_clique_growth(&mut self) {
+	// TODO Ensure clique doesn't contain all vertices.
+	
+	// TODO Pick random vertex  vnot in clique
+	
+	// TODO color all edges between every set of r-1 of the clique's vertices & v
+	//      with the clique's color.
+	  
+	  
+	// cliques: FxHashMap<u8, Vec<Clique>>,
+	let mut cliques_count: usize = 0;
+	let mut growth_clique: &Clique;
+	let target: usize = ((fastrand::f64()) * (self.maximal_color_clique_ct as f64)) as usize;
+	for (key, val) in self.cliques.iter() {
+      cliques_count += val.len();
+      if cliques_count >= target {
+		growth_clique = &val[cliques_count % target];
+		break;
+	  }
     }
   }
   
