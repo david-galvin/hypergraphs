@@ -236,7 +236,7 @@ impl HyperGraph {
 	for (key, val) in self.cliques.iter() {
       cliques_count += val.len();
       if cliques_count >= target {
-		growth_clique = &val[cliques_count % target];
+		growth_clique = &val[target - (cliques_count - val.len())];
 		break;
 	  }
     }
