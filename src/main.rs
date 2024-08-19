@@ -364,17 +364,11 @@ impl HyperGraph {
   fn find_cliques_from_scratch(&mut self) {
     self.cliques.clear();
     self.maximal_color_clique_ct = 0;
-    let mut smaller_cliques_ct: usize;
-    let mut order_usize: usize;
-    let mut compatible_cliques_needed: usize;
-    let mut key_small_cliques: u8;  // key for order-1 cliques
-    let mut explored_subsets = FxHashSet::<u64>::default();
     
     let mut cliques_to_add = Vec::<Clique>::new();
+    let mut key_small_cliques: u8;
 
     for color in 0..self.color_ct {
-      // println!("\n  color: {}", color);
-      
       // Create all trivial color-cliques (those having order equal to EDGE_ORDER - 1)
       self.add_clique_vec(
         Clique::generate_all_cliques(color, self.edge_order - 1, self.graph_order), 
@@ -383,10 +377,12 @@ impl HyperGraph {
       // Create all color-edge-cliques
       let mut edge_cliques = Vec::<Clique>::new();
       for edge in &mut self.edges {
-        if edge.color == color {
-          edge_cliques.push(edge.clone());
-        }
+          if edge.color == color {
+              edge_cliques.push(edge.clone());
+          }
       }
+
+            
       self.add_clique_vec(
         edge_cliques,
         self.get_key(color, self.edge_order));
@@ -394,23 +390,12 @@ impl HyperGraph {
       
       // Mark fully contained trivial color-cliques as inactive (aka non-maximal)  
       self.mark_nonmaximal_cliques_inactive(color, self.edge_order);
-      
-      // Create all color-order-cliques for orders > edge_order
        
       // 'smaller_cliques' refers to all cliques that match the color
       // we're examining, and have (order-1) vertices.
       // The k'th bit of a cliques_index corresponds to the index in cliques[(color, order - 1)]
       
-      // These are used in a hot loop; allocating memory once here.
-      let mut candidate_clique_members: u64;
-      let mut cur_smaller_clique_members: u64;
-      let mut i_members: u64;
-      let mut j_members: u64;
-      
       for order in (self.edge_order + 1)..(self.graph_order + 1) {
-        // println!("    order: {}", order); 
-        
-        order_usize = order as usize;
         key_small_cliques = self.get_key(color, order - 1);
         
         // Confirm we have enough smaller cliques to build a bigger clique out of
@@ -419,37 +404,18 @@ impl HyperGraph {
           None => break,
         };
         
-        smaller_cliques_ct = smaller_cliques.len();
-        if smaller_cliques_ct < order_usize {
+        if smaller_cliques.len() < order as usize {
           break;
         }
 
         cliques_to_add.clear(); // Clear previous cliques
-        explored_subsets.clear(); // Clear explored subsets
 
-        for i in 0..=(smaller_cliques_ct - order_usize) {
-          i_members = smaller_cliques[i].members;
-          for j in (i + 1)..=(smaller_cliques_ct - order_usize + 1) {
-            j_members = smaller_cliques[j].members;
-            candidate_clique_members = i_members | j_members;
-            if !(j_members ^ candidate_clique_members).is_power_of_two() || explored_subsets.contains(&candidate_clique_members) {
-              continue;
-            }
-            explored_subsets.insert(candidate_clique_members);
-            compatible_cliques_needed = order_usize - 2;
-            for k in (j + 1)..smaller_cliques_ct {
-              cur_smaller_clique_members = smaller_cliques[k].members;
-              if cur_smaller_clique_members & candidate_clique_members == cur_smaller_clique_members {
-                compatible_cliques_needed -= 1;
-                if compatible_cliques_needed == 0 {
-                  // We've found an order-clique!
-                  cliques_to_add.push(Clique::new(candidate_clique_members, color, self.graph_order));
-                }
-                continue;
-              }
-            }
-          }
+        let expansions = math::get_expansions(&smaller_cliques.iter().map(|c| c.members).collect(), self.graph_order as u64);
+        
+        for candidate in expansions {
+          cliques_to_add.push(Clique::new(candidate, color, self.graph_order));
         }
+
 
         // Move cliques_to_add into add_clique
         while let Some(clique) = cliques_to_add.pop() {
@@ -478,16 +444,16 @@ impl HyperGraph {
 */
   
   fn print_annealing_status(&self, annealing_count: usize) {
-    if (annealing_count <=        100)                                     || 
-       (annealing_count <=       1000 && annealing_count %        10 == 0) ||
-       (annealing_count <=      10000 && annealing_count %       100 == 0) ||
-       (annealing_count <=     100000 && annealing_count %      1000 == 0) ||
-       (annealing_count <=    1000000 && annealing_count %     10000 == 0) ||
-       (annealing_count <=   10000000 && annealing_count %    100000 == 0) ||
-       (annealing_count <=  100000000 && annealing_count %   1000000 == 0) ||
-       (annealing_count <= 1000000000 && annealing_count %  10000000 == 0) ||
-       (annealing_count >  1000000000 && annealing_count % 100000000 == 0) {
-      println!("annealings: {}, Time: {:?}", annealing_count, self.start.elapsed());
+    if (annealing_count <=           100)                                       || 
+       (annealing_count <=         1_000 && annealing_count %          10 == 0) ||
+       (annealing_count <=        10_000 && annealing_count %         100 == 0) ||
+       (annealing_count <=       100_000 && annealing_count %       1_000 == 0) ||
+       (annealing_count <=     1_000_000 && annealing_count %      10_000 == 0) ||
+       (annealing_count <=    10_000_000 && annealing_count %     100_000 == 0) ||
+       (annealing_count <=   100_000_000 && annealing_count %   1_000_000 == 0) ||
+       (annealing_count <= 1_000_000_000 && annealing_count %  10_000_000 == 0) ||
+       (annealing_count >  1_000_000_000 && annealing_count % 100_000_000 == 0) {
+      println!("annealings: {}, Time Per: {:?}", annealing_count, self.start.elapsed() / annealing_count.try_into().unwrap());
     }  
   }
   
