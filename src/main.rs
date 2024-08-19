@@ -1,18 +1,20 @@
 #![allow(dead_code)]
-#![allow(unused_imports)]
-#![allow(unused_variables)]
-#![allow(unused_mut)]
+//#![allow(unused_imports)]
+//#![allow(unused_variables)]
+//#![allow(unused_mut)]
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::fmt;
 use std::env;
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 //use smallvec::{smallvec, SmallVec}; // https://docs.rs/smallvec/1.10.0/smallvec/struct.SmallVec.html
 
 
 // f_r(t, n) is the minimum number of maximal monochromatic cliques
 // across all t-colorings of the complete r-uniform hypergraph on n vertices
 
+// TODO Instead of flipping all edges, try having each clique absorbing each vertex not in it
+//      and reverting if it doesn't improve.
 // TODO Limit work when changing an edge color (instead of recalculating from scratch)
 // TODO Parallelization
 // TODO Experiment with annealing -- retain the best hypergraphs, and
@@ -22,7 +24,6 @@ use std::time::{Duration, Instant};
 //        b) creating a new vertex and only randomizing new edge colors.
 //        c) creating a new vertex, find the color with the smallest maximum order, and extend all such color-order cliques to include the new vertex, then randomly color other edges.
 // TODO Develop a likely-unique signature for each graph, based on its degree & clique sequence be color (count of degrees, count of cliques)
-// TODO instead of random edge colors, randomly have a clique absorb a vertex.
 
 fn main() {
   // HANDLE ARGS
@@ -52,7 +53,7 @@ fn main() {
     edge_index_left = 0;
     'edge_loop: while edge_index_left < edge_index_right {
       let edge = &mut h.edges[edge_index_left];
-      for clique_members in args[arg_index].parse::<String>().unwrap().split(",") {
+      for clique_members in args[arg_index].parse::<String>().unwrap().split(',') {
         let clique_members_u64: u64 = clique_members.parse().expect("Not a valid number");
         if edge.members & clique_members_u64 == edge.members {
           edge.color = color;
@@ -97,8 +98,8 @@ fn main() {
   
   loop {
     if randomize_edge_colors {
-      //h.randomize_edge_colors();
-      h.randomly_grow_a_clique();
+      h.randomize_edge_colors();
+      //h.randomly_grow_a_clique();
     } else {
       break;
     }
@@ -112,8 +113,8 @@ fn main() {
 
       // Try all alternate colors for the current edge
       for _ in 0..(color_ct - 1) {
-        h.increment_edge_color(edge_index_to_try);
-        //h.randomly_grow_a_clique();
+        //h.increment_edge_color(edge_index_to_try);
+        h.randomly_grow_a_clique();
         h.find_cliques_from_scratch();
         if h.maximal_color_clique_ct < best_from_current_start {
           if h.maximal_color_clique_ct < best_from_all_starts || 
@@ -127,7 +128,7 @@ fn main() {
               edge_index_to_try, 
               annealing_count,
               h.start.elapsed());
-            
+            println!("edge {} = {}", edge_index_to_try, h.edges[edge_index_to_try]);
             best_from_all_starts = h.maximal_color_clique_ct;
             println!("{}", h);
           }
@@ -153,7 +154,6 @@ fn main() {
 struct HyperGraph {
   edges: Vec<Clique>,
   cliques: FxHashMap<u8, Vec<Clique>>,
-  cliques_inactive: Vec<Clique>,
   members_of_cliques_which_should_be_deactivated: FxHashSet<u64>,
   maximal_color_clique_ct: usize,
   edge_order: u8,
@@ -177,25 +177,22 @@ impl HyperGraph {
     
     let (upper_bound, theorem) = get_upper_bound(graph_order, edge_order, color_ct);
   
-    let h = HyperGraph {
-      edges: Clique::generate_all_cliques(u8::max_value(), edge_order, graph_order),
+    HyperGraph {
+      edges: Clique::generate_all_cliques(u8::MAX, edge_order, graph_order),
       cliques,
-      cliques_inactive: Vec::new(),
       members_of_cliques_which_should_be_deactivated: FxHashSet::<u64>::default(),
       maximal_color_clique_ct: 0,
       edge_order,
       color_ct,
       graph_order,
-      graph_size: graph_size,
+      graph_size,
       last_random_edge_index: graph_size - 1, 
       set_bit_getter: math::SetBitGetter::new(),
       util_clique: Clique::new(0, 0, 0),
       start: Instant::now(),
       theorem,
       upper_bound,
-    };
-
-    h
+    }
   }
   
   fn get_key(&self, color: u8, order: u8) -> u8 {
@@ -215,13 +212,12 @@ impl HyperGraph {
   }
   
   fn randomly_grow_a_clique(&mut self) {
-	  let mut cliques_ct: usize = 0;
 	  let mut clique_to_grow: &Clique = &self.util_clique; // A dummy until we find our clique
     let clique_to_grow_indx: usize = fastrand::usize(0..self.maximal_color_clique_ct);
     let mut vec_min_index: usize = 0;
     let mut vec_max_index: usize;
-	  for (key, cliques_vec) in self.cliques.iter() {
-      if cliques_vec.len() == 0 {
+	  for (_key, cliques_vec) in self.cliques.iter() {
+      if cliques_vec.is_empty() {
         continue;
       }
       vec_max_index = vec_min_index + cliques_vec.len() - 1;
@@ -259,7 +255,7 @@ impl HyperGraph {
   }
   
   fn confirm_cliques_vec_initialized(&mut self, key: u8) {
-    self.cliques.entry(key).or_insert_with(Vec::<Clique>::new);
+    self.cliques.entry(key).or_default();
   }
   
   fn add_clique(&mut self, clique: Clique) {
@@ -304,62 +300,8 @@ impl HyperGraph {
         i += 1;
       }
     }
-    
-    
-    /*for small_clique in self.cliques.get_mut(&key_small).expect("Uninitalized Vector") {
-      if small_clique.is_active && self.members_of_cliques_which_should_be_deactivated.contains(&small_clique.members) {
-        self.members_of_cliques_which_should_be_deactivated.remove(&small_clique.members);
-        small_clique.set_inactive();
-        self.maximal_color_clique_ct -= 1;
-      }
-    }*/
   }
 
-
-/*
-  fn find_cliques_after_edge_recoloring(&mut self, pri_color: u8, edge_index: usize) {
-    let mut key: u8;
-    let mut key_small: u8;
-    let mut any_activated: bool;
-    let edge_members = self.edges[edge_index].members;
-    let mut buffer: Vec<_> = Vec::with_capacity(128); // Preallocate buffer with a reasonable size
-    
-    for order in self.edge_order..=self.graph_order {
-      key = self.get_key(pri_color, order);
-      key_small = self.get_key(pri_color, order - 1);
-      any_activated = false;
-
-      if let Some(cliques) = self.cliques.get_mut(&key) {
-        buffer.clear(); // Reuse buffer
-        
-        // CHECK FOR ACTIVE CLIQUES CONTAINING THE EDGE AS IF IT WERE STILL ITS OLD/PRIOR COLOR
-        // STORE IN A BUFFER FOR DEACTIVIATION
-        for clique in cliques.iter_mut() {
-          if clique.is_active && (edge_members & clique.members) == edge_members {
-            clique.set_inactive();
-            buffer.push(clique.members); // Store members for the second loop
-          }
-        }
-        
-        // ACTIVATE ANCESTOR CLIQUES
-        if let Some(small_cliques) = self.cliques.get_mut(&key_small) {
-          for pri_color_small_clique in small_cliques.iter_mut() {
-            if buffer.iter().any(|&members| (pri_color_small_clique.members & members) == pri_color_small_clique.members) {
-              pri_color_small_clique.set_active();
-              any_activated = true;
-            }
-          }
-        }
-      }
-
-      // CONFIRM ACTIVATED ANCESTOR CLIQUES AREN'T CONTAINED IN LARGER ACTIVE CLIQUES
-      if any_activated {
-        self.mark_nonmaximal_cliques_inactive(pri_color, order);
-      }
-    }
-  }
-
-*/
   
   fn find_cliques_from_scratch(&mut self) {
     self.cliques.clear();
@@ -429,19 +371,7 @@ impl HyperGraph {
     }
   }
 
-/*
-  fn reset_cliques_after_edge_recoloring(&mut self) {
-    for color in 0..self.color_ct {
-      for clique in self.cliques.get_mut(&self.get_key(color, self.edge_order - 1)).expect("Missing clique vector") {
-        clique.set_active();
-      }
-      
-      for order in (self.edge_order + 1)..(self.graph_order + 1) {
-        self.cliques.get_mut(&self.get_key(color, order)).expect("Missing clique vector").clear();
-      }
-    }
-  }
-*/
+
   
   fn print_annealing_status(&self, annealing_count: usize) {
     if (annealing_count <=           100)                                       || 
@@ -477,7 +407,6 @@ impl HyperGraph {
     ret_str += "\nMaximal Color-Cliques\n";
     for color in 0..self.color_ct {
       ret_str += &format!("  color {}:\n", color);
-      cliques_str += &format!("");
       let mut first_of_color: bool = true;
       for order in (self.edge_order - 1)..(self.graph_order + 1) {
         let mut order_str = format!("    order {}:\n", order);
@@ -486,15 +415,12 @@ impl HyperGraph {
           continue;
         }
         for clique in &self.cliques[&self.get_key(color, order)] {
-          if !clique.is_active {
-            continue;
-          }
           if order >= self.edge_order {
             if first_of_color {
-              cliques_str += &format!(" ");
+              cliques_str += " ";
               first_of_color = false;
             } else {
-              cliques_str += &format!(",");
+              cliques_str += ",";
             }
             cliques_str += &format!("{}", clique.members);
             
@@ -543,7 +469,6 @@ struct Clique {
   color: u8,
   order: u8,
   graph_order: u8,
-  is_active: bool,
 }
 
 impl Clique {
@@ -553,7 +478,6 @@ impl Clique {
       color,
       order: members.count_ones() as u8,
       graph_order,
-      is_active: true,
     }
   }
   
@@ -576,14 +500,6 @@ impl Clique {
     self.color = (self.color + 1) % color_ct;
   }
   
-  fn set_active(&mut self) {
-    self.is_active = true;
-  }
-  
-  fn set_inactive(&mut self) {
-    self.is_active = false;
-  }
-  
   fn get_string(&self) -> String {
     let mut ret_str = String::new();
     for i in (0..self.graph_order).rev() {
@@ -598,9 +514,6 @@ impl Clique {
     ret_str += format!("{:0>width$}", members_str, width = self.graph_order as usize).as_str();
     ret_str += format!(" ({})", self.members).as_str();
     ret_str += format!(" ({})", self.color).as_str();
-    if !self.is_active {
-      ret_str += " (I)"; // inactive
-    }
     ret_str
   }
   
@@ -783,33 +696,31 @@ fn get_upper_bound(n: u8, r: u8, t: u8) -> (usize, String) { // (bound, theorem,
     }
   }
   
-  if r == 2 {
-    if t_is_ppo_plus_one {
-      let q = t - 1;
-      // Theorem 19a
-      if (q-1).pow(2) < n && n <= (q-1) * q {
-        cur_upper_bound = q.pow(2) + q - 1;
-        if cur_upper_bound < upper_bound {
-          upper_bound = cur_upper_bound; 
-          theorem_str = format!("Thm 19a: f_{}({}, {}) = {}\n         f_2(q + 1, n) = q^2 + q - 1 if there is a PP of order q and (q - 1)^2 < n <= (q - 1)q", r, t, n, cur_upper_bound);
-        } 
-      }
-      // Theorem 19b
-      if (q-1) * q < n && n <= q.pow(2) {
-        cur_upper_bound = q.pow(2) + q;
-        if cur_upper_bound < upper_bound {
-          upper_bound = cur_upper_bound; 
-          theorem_str = format!("Thm 19b: f_{}({}, {}) = {}\n         f_2(q + 1, n) = q^2 + q if there is a PP of order q and (q-1)q < n <= q^2", r, t, n, cur_upper_bound);
-        } 
-      }
-      // Theorem 20
-      if n == (r - 1).pow(2) {
-        cur_upper_bound = (r-1).pow(2) + r - 1;
-        if cur_upper_bound < upper_bound {
-          upper_bound = cur_upper_bound; 
-          theorem_str = format!("Thm 20: f_{}({}, {}) = {}\n        f_2(n + 1, n^2) = n^2 + n if there is a PP of order n", r, t, n, cur_upper_bound);
-        } 
-      }
+  if r == 2 && t_is_ppo_plus_one {
+    let q = t - 1;
+    // Theorem 19a
+    if (q-1).pow(2) < n && n <= (q-1) * q {
+      cur_upper_bound = q.pow(2) + q - 1;
+      if cur_upper_bound < upper_bound {
+        upper_bound = cur_upper_bound; 
+        theorem_str = format!("Thm 19a: f_{}({}, {}) = {}\n         f_2(q + 1, n) = q^2 + q - 1 if there is a PP of order q and (q - 1)^2 < n <= (q - 1)q", r, t, n, cur_upper_bound);
+      } 
+    }
+    // Theorem 19b
+    if (q-1) * q < n && n <= q.pow(2) {
+      cur_upper_bound = q.pow(2) + q;
+      if cur_upper_bound < upper_bound {
+        upper_bound = cur_upper_bound; 
+        theorem_str = format!("Thm 19b: f_{}({}, {}) = {}\n         f_2(q + 1, n) = q^2 + q if there is a PP of order q and (q-1)q < n <= q^2", r, t, n, cur_upper_bound);
+      } 
+    }
+    // Theorem 20
+    if n == (r - 1).pow(2) {
+      cur_upper_bound = (r-1).pow(2) + r - 1;
+      if cur_upper_bound < upper_bound {
+        upper_bound = cur_upper_bound; 
+        theorem_str = format!("Thm 20: f_{}({}, {}) = {}\n        f_2(n + 1, n^2) = n^2 + n if there is a PP of order n", r, t, n, cur_upper_bound);
+      } 
     }
   }
   
@@ -849,9 +760,7 @@ fn get_upper_bound(n: u8, r: u8, t: u8) -> (usize, String) { // (bound, theorem,
     let n_mod_5 = n % 5;
     if n_mod_5 == 1 {
       cur_upper_bound = n + 4;
-    } else if n_mod_5 == 2 {
-      cur_upper_bound = n + 7;
-    } else if n_mod_5 == 3 {
+    } else if n_mod_5 == 2 || n_mod_5 == 3 {
       cur_upper_bound = n + 7;
     } else if n_mod_5 == 4 {
       cur_upper_bound = n + 6;
