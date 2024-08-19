@@ -20,45 +20,29 @@ use std::time::{Duration, Instant};
 // TODO Grow a graph by:
 //        a) cloning a vertex, and only randomizing the other new edges (having the cloned vertex and its clone as two nodes of the edge)
 //        b) creating a new vertex and only randomizing new edge colors.
+//        c) creating a new vertex, find the color with the smallest maximum order, and extend all such color-order cliques to include the new vertex, then randomly color other edges.
 // TODO Develop a likely-unique signature for each graph, based on its degree & clique sequence be color (count of degrees, count of cliques)
-// println!("Time elapsed: {:?}", start.elapsed());
+// TODO instead of random edge colors, randomly have a clique absorb a vertex.
 
 fn main() {
-  let start = Instant::now();
-  // Get user inputs. Since we use f_{edge order}(color_count, graph_order) in the paper, we'll preserve this ordering
+  // HANDLE ARGS
+  
+  // ARGS 1: GET ARGS
   let args: Vec<String> = env::args().collect();
   if args.len() < 3 {
     println!("\ncargo run edge_order color_ct graph_order. E.g., f_3(2, 6) = cargo run 3 2 6\n");
     return;
   }
   
-  // Inputs:
-  // Edge Order: The number of vertices that define an edge. 2 for a normal graph.
-  // Color Count: Each edge has one of color_ct colors
-  // Graph Order: The number of vertices in the graph
-  let edge_order: u8 = args[1].parse().unwrap();
-  let color_ct: u8 = args[2].parse().unwrap();
-  let graph_order: u8 = args[3].parse().unwrap();
+  // ARGS 2: PARSE BASIC ARGS
+  let edge_order: u8 = args[1].parse().unwrap();                                    // The number of vertices that define an edge. Normal graphs have edge_order = 2.
+  let color_ct: u8 = args[2].parse().unwrap();                                      // The number of colors, which are integers: 0, 1, ..., color_ct - 1.
+  let graph_order: u8 = args[3].parse().unwrap();                                   // The number of vertices in the graph.
   
-  let randomize_colors: bool;
-  
-  // Derived:
-  // Graph Size: The count of edges in the graph
-  let graph_size: usize = math::choose(graph_order as usize, edge_order as usize);
-
-  // Calculate & print upper bound on count of maximal monochromatic cliques
-  let (upper_bound, theorem) = get_upper_bound(graph_order, edge_order, color_ct);
-  
-  let threshold_str = format!("{}", theorem);
-  println!("{}", threshold_str);
-  
+  // CREATE HYPERGRAPH
   let mut h: HyperGraph = HyperGraph::new(edge_order, color_ct, graph_order);
   
-  
-  // set edge colors if they've been supplied
-  // idea: we'll color edges from left to right, and move any intentionally 
-  // uncolored ones to the right. If at the end there are any uncolored ones
-  // left, those will be randomly explored.
+  // ARGS 3: PARSE CLIQUE CSV ARGS
   let mut arg_index: usize = 4;
   let mut edge_index_right: usize = h.graph_size; // refers to the left-most edge with color
   let mut edge_index_left: usize = h.graph_size; // refers to the left-most edge not yet checked for color
@@ -82,26 +66,24 @@ fn main() {
     arg_index += 1;
   }
   
+  // IF ANY EDGE COLORS WERE UNSPECIFIED, WE WILL SEARCH FOR IMPROVEMENTS
+  let randomize_edge_colors: bool;
   if edge_index_left == 0 {
-    randomize_colors = false;
+    randomize_edge_colors = false;
     h.find_cliques_from_scratch();
     println!("\n\nInput Hypergraph had all edge colors specified:");
     println!("{}", h);
   } else {
     h.last_random_edge_index = edge_index_left - 1;
-    randomize_colors = true;
+    randomize_edge_colors = true;
   }
   
-  // Show all hypergraphs with uniform coloring of all unspecified edges
-  if randomize_colors && h.last_random_edge_index < graph_size - 1 {
-    for cur_color in 0..color_ct {
-      for i in 0..=h.last_random_edge_index {
-        h.edges[i].color = cur_color;
-      }
-      h.find_cliques_from_scratch();
-      println!("\n\nInitial Hypergraph with unspecified edges colored {}:", cur_color);
-      println!("{}", h);
-    }
+  // Regardless of future changes, initially randomize all unspecified edges.
+  if randomize_edge_colors {
+    h.randomize_edge_colors();
+    h.find_cliques_from_scratch();
+    println!("\n\nInitial Hypergraph with unspecified edges colored randomly");
+    println!("{}", h);
   }
   
   
@@ -111,9 +93,12 @@ fn main() {
   let mut best_from_all_starts: usize = usize::MAX;
   let mut annealing_count: usize = 0;
   
+  h.find_cliques_from_scratch();
+  
   loop {
-    if randomize_colors {
-      h.randomize_colors();
+    if randomize_edge_colors {
+      //h.randomize_edge_colors();
+      h.randomly_grow_a_clique();
     } else {
       break;
     }
@@ -122,26 +107,26 @@ fn main() {
 
     loops_without_improvement = 0;
     
-    while loops_without_improvement < graph_size  {
-      //println!("loops without improvement: {}", loops_without_improvement);
+    while loops_without_improvement < h.graph_size  {
       loops_without_improvement += 1;
 
       // Try all alternate colors for the current edge
       for _ in 0..(color_ct - 1) {
         h.increment_edge_color(edge_index_to_try);
+        //h.randomly_grow_a_clique();
         h.find_cliques_from_scratch();
         if h.maximal_color_clique_ct < best_from_current_start {
           if h.maximal_color_clique_ct < best_from_all_starts || 
-          ((h.maximal_color_clique_ct == best_from_all_starts) && h.maximal_color_clique_ct <= upper_bound) {
+          ((h.maximal_color_clique_ct == best_from_all_starts) && h.maximal_color_clique_ct <= h.upper_bound) {
             
             println!(
               "\n------------------------------------------\n\n{}.\n\nIMPROVEMENT: {} -> {} (flipped edge {}). Annealings: {}, Time: {:?}", 
-              threshold_str, 
+              h.theorem, 
               best_from_all_starts, 
               h.maximal_color_clique_ct,
               edge_index_to_try, 
               annealing_count,
-              start.elapsed());
+              h.start.elapsed());
             
             best_from_all_starts = h.maximal_color_clique_ct;
             println!("{}", h);
@@ -157,26 +142,18 @@ fn main() {
       }
       
       // Shift to the next edge index
-      edge_index_to_try = (edge_index_to_try + 1) % graph_size;
+      edge_index_to_try = (edge_index_to_try + 1) % (h.last_random_edge_index + 1);
     }
     annealing_count += 1;
     
-    if (annealing_count <= 100) || 
-       (annealing_count <= 1000 && annealing_count % 10 == 0) ||
-       (annealing_count <= 10000 && annealing_count % 100 == 0) ||
-       (annealing_count <= 100000 && annealing_count % 1000 == 0) ||
-       (annealing_count <= 1000000 && annealing_count % 10000 == 0) ||
-       (annealing_count <= 10000000 && annealing_count % 100000 == 0) ||
-       (annealing_count <= 100000000 && annealing_count % 1000000 == 0) ||
-       (annealing_count >  100000000 && annealing_count % 10000000 == 0) {
-      println!("annealings: {}, Time: {:?}", annealing_count, start.elapsed());
-    }
+    h.print_annealing_status(annealing_count);
   }
 }
 
 struct HyperGraph {
   edges: Vec<Clique>,
   cliques: FxHashMap<u8, Vec<Clique>>,
+  cliques_inactive: Vec<Clique>,
   members_of_cliques_which_should_be_deactivated: FxHashSet<u64>,
   maximal_color_clique_ct: usize,
   edge_order: u8,
@@ -185,6 +162,10 @@ struct HyperGraph {
   graph_size: usize,
   last_random_edge_index: usize,
   set_bit_getter: math::SetBitGetter,
+  util_clique: Clique,
+  start: Instant,
+  theorem: String,
+  upper_bound: usize,
 }
 
 impl HyperGraph {
@@ -193,10 +174,13 @@ impl HyperGraph {
     let cliques = FxHashMap::<u8, Vec<Clique>>::default();
     
     let graph_size: usize = math::choose(graph_order as usize, edge_order as usize);
+    
+    let (upper_bound, theorem) = get_upper_bound(graph_order, edge_order, color_ct);
   
     let h = HyperGraph {
       edges: Clique::generate_all_cliques(u8::max_value(), edge_order, graph_order),
       cliques,
+      cliques_inactive: Vec::new(),
       members_of_cliques_which_should_be_deactivated: FxHashSet::<u64>::default(),
       maximal_color_clique_ct: 0,
       edge_order,
@@ -205,6 +189,10 @@ impl HyperGraph {
       graph_size: graph_size,
       last_random_edge_index: graph_size - 1, 
       set_bit_getter: math::SetBitGetter::new(),
+      util_clique: Clique::new(0, 0, 0),
+      start: Instant::now(),
+      theorem,
+      upper_bound,
     };
 
     h
@@ -214,31 +202,55 @@ impl HyperGraph {
     color * self.graph_order + order
   }
 
-  fn randomize_colors(&mut self) {
+  fn randomize_edge_colors(&mut self) {
     for i in 0..=self.last_random_edge_index {
       self.edges[i].set_color(fastrand::u8(0..self.color_ct));
     }
   }
   
-  fn random_clique_growth(&mut self) {
-	// TODO Ensure clique doesn't contain all vertices.
-	
-	// TODO Pick random vertex v not in clique
-	
-	// TODO color all edges between every set of r-1 of the clique's vertices & v
-	//      with the clique's color.
-	  
-	  
-	// cliques: FxHashMap<u8, Vec<Clique>>,
-	let mut cliques_count: usize = 0;
-	let mut growth_clique: &Clique;
-	let target: usize = ((fastrand::f64()) * (self.maximal_color_clique_ct as f64)) as usize;
-	for (key, val) in self.cliques.iter() {
-      cliques_count += val.len();
-      if cliques_count >= target {
-		growth_clique = &val[target - (cliques_count - val.len())];
-		break;
-	  }
+  fn set_edge_colors(&mut self, target_color: u8) {
+    for i in 0..=self.last_random_edge_index {
+      self.edges[i].set_color(target_color);
+    }
+  }
+  
+  fn randomly_grow_a_clique(&mut self) {
+	  let mut cliques_ct: usize = 0;
+	  let mut clique_to_grow: &Clique = &self.util_clique; // A dummy until we find our clique
+    let clique_to_grow_indx: usize = fastrand::usize(0..self.maximal_color_clique_ct);
+    let mut vec_min_index: usize = 0;
+    let mut vec_max_index: usize;
+	  for (key, cliques_vec) in self.cliques.iter() {
+      if cliques_vec.len() == 0 {
+        continue;
+      }
+      vec_max_index = vec_min_index + cliques_vec.len() - 1;
+
+      if vec_max_index >= clique_to_grow_indx {
+		    clique_to_grow = &cliques_vec[clique_to_grow_indx - vec_min_index];
+        if clique_to_grow.order == self.graph_order {
+          println!("WE ONLY REACH THIS IF WE HIT A CLIQUE CONTAINING ALL VERTICES!");
+          return;
+        }
+		    break;
+	    }
+      
+      vec_min_index = vec_max_index + 1;
+    }
+    
+    // Randomly pick a vertex not in that clique
+    let mut vertex: u64 = fastrand::u64(0..self.graph_order as u64);
+    while vertex & clique_to_grow.members != 0 {
+      vertex = fastrand::u64(0..self.graph_order as u64);
+    }
+    
+    // Recolor all edges whose vertices are all either our chosen
+    // vertex or our chosen clique with the clique's colors.
+    let mask: u64 = clique_to_grow.members | vertex;
+    for i in 0..=self.last_random_edge_index {
+      if self.edges[i].members & mask == self.edges[i].members {
+        self.edges[i].set_color(clique_to_grow.color);
+      }
     }
   }
   
@@ -280,13 +292,27 @@ impl HyperGraph {
 
 
     // Parse all small cliques, deleting any whose members are marked for deletion.
-    for small_clique in self.cliques.get_mut(&key_small).expect("Uninitalized Vector") {
+    let mut num_cliques: usize = self.cliques[&key_small].len();
+    let mut i = 0;
+    while i < num_cliques {
+      if self.members_of_cliques_which_should_be_deactivated.contains(&self.cliques[&key_small][i].members) {
+        self.members_of_cliques_which_should_be_deactivated.remove(&self.cliques[&key_small][i].members);
+        self.cliques.get_mut(&key_small).expect("Uninitalized Vector").swap_remove(i);
+        num_cliques -= 1;
+        self.maximal_color_clique_ct -= 1;
+      } else {
+        i += 1;
+      }
+    }
+    
+    
+    /*for small_clique in self.cliques.get_mut(&key_small).expect("Uninitalized Vector") {
       if small_clique.is_active && self.members_of_cliques_which_should_be_deactivated.contains(&small_clique.members) {
         self.members_of_cliques_which_should_be_deactivated.remove(&small_clique.members);
         small_clique.set_inactive();
         self.maximal_color_clique_ct -= 1;
       }
-    }
+    }*/
   }
 
 
@@ -338,7 +364,7 @@ impl HyperGraph {
   fn find_cliques_from_scratch(&mut self) {
     self.cliques.clear();
     self.maximal_color_clique_ct = 0;
-    let mut smaller_cliques_count: usize;
+    let mut smaller_cliques_ct: usize;
     let mut order_usize: usize;
     let mut compatible_cliques_needed: usize;
     let mut key_small_cliques: u8;  // key for order-1 cliques
@@ -393,17 +419,17 @@ impl HyperGraph {
           None => break,
         };
         
-        smaller_cliques_count = smaller_cliques.len();
-        if smaller_cliques_count < order_usize {
+        smaller_cliques_ct = smaller_cliques.len();
+        if smaller_cliques_ct < order_usize {
           break;
         }
 
         cliques_to_add.clear(); // Clear previous cliques
         explored_subsets.clear(); // Clear explored subsets
 
-        for i in 0..=(smaller_cliques_count - order_usize) {
+        for i in 0..=(smaller_cliques_ct - order_usize) {
           i_members = smaller_cliques[i].members;
-          for j in (i + 1)..=(smaller_cliques_count - order_usize + 1) {
+          for j in (i + 1)..=(smaller_cliques_ct - order_usize + 1) {
             j_members = smaller_cliques[j].members;
             candidate_clique_members = i_members | j_members;
             if !(j_members ^ candidate_clique_members).is_power_of_two() || explored_subsets.contains(&candidate_clique_members) {
@@ -411,7 +437,7 @@ impl HyperGraph {
             }
             explored_subsets.insert(candidate_clique_members);
             compatible_cliques_needed = order_usize - 2;
-            for k in (j + 1)..smaller_cliques_count {
+            for k in (j + 1)..smaller_cliques_ct {
               cur_smaller_clique_members = smaller_cliques[k].members;
               if cur_smaller_clique_members & candidate_clique_members == cur_smaller_clique_members {
                 compatible_cliques_needed -= 1;
@@ -450,7 +476,22 @@ impl HyperGraph {
     }
   }
 */
-
+  
+  fn print_annealing_status(&self, annealing_count: usize) {
+    if (annealing_count <=        100)                                     || 
+       (annealing_count <=       1000 && annealing_count %        10 == 0) ||
+       (annealing_count <=      10000 && annealing_count %       100 == 0) ||
+       (annealing_count <=     100000 && annealing_count %      1000 == 0) ||
+       (annealing_count <=    1000000 && annealing_count %     10000 == 0) ||
+       (annealing_count <=   10000000 && annealing_count %    100000 == 0) ||
+       (annealing_count <=  100000000 && annealing_count %   1000000 == 0) ||
+       (annealing_count <= 1000000000 && annealing_count %  10000000 == 0) ||
+       (annealing_count >  1000000000 && annealing_count % 100000000 == 0) {
+      println!("annealings: {}, Time: {:?}", annealing_count, self.start.elapsed());
+    }  
+  }
+  
+  
   fn get_string(&self) -> String {
     let mut vertex_clique_counts: Vec<u8> = vec![0; (self.color_ct * self.graph_order) as usize];
     let mut cliques_str = format!("cargo run --release {} {} {}", self.edge_order, self.color_ct, self.graph_order);
