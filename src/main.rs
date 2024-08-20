@@ -1,7 +1,7 @@
-#![allow(dead_code)]
-//#![allow(unused_imports)]
-//#![allow(unused_variables)]
-//#![allow(unused_mut)]
+// #![allow(dead_code)]
+// #![allow(unused_imports)]
+// #![allow(unused_variables)]
+// #![allow(unused_mut)]
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::fmt;
@@ -36,9 +36,9 @@ fn main() {
   }
   
   // ARGS 2: PARSE BASIC ARGS
-  let edge_order: u8 = args[1].parse().unwrap();                                    // The number of vertices that define an edge. Normal graphs have edge_order = 2.
-  let color_ct: u8 = args[2].parse().unwrap();                                      // The number of colors, which are integers: 0, 1, ..., color_ct - 1.
-  let graph_order: u8 = args[3].parse().unwrap();                                   // The number of vertices in the graph.
+  let edge_order: u8 = args[1].parse().unwrap();  // The number of vertices that define an edge. Normal graphs have edge_order = 2.
+  let color_ct: u8 = args[2].parse().unwrap();    // The number of colors, which are integers: 0, 1, ..., color_ct - 1.
+  let graph_order: u8 = args[3].parse().unwrap(); // The number of vertices in the graph.
   
   // CREATE HYPERGRAPH
   let mut h: HyperGraph = HyperGraph::new(edge_order, color_ct, graph_order);
@@ -68,19 +68,19 @@ fn main() {
   }
   
   // IF ANY EDGE COLORS WERE UNSPECIFIED, WE WILL SEARCH FOR IMPROVEMENTS
-  let randomize_edge_colors: bool;
+  let any_unspecified_edges: bool;
   if edge_index_left == 0 {
-    randomize_edge_colors = false;
+    any_unspecified_edges = false;
     h.find_cliques_from_scratch();
     println!("\n\nInput Hypergraph had all edge colors specified:");
     println!("{}", h);
   } else {
     h.last_random_edge_index = edge_index_left - 1;
-    randomize_edge_colors = true;
+    any_unspecified_edges = true;
   }
   
   // Regardless of future changes, initially randomize all unspecified edges.
-  if randomize_edge_colors {
+  if any_unspecified_edges {
     h.randomize_edge_colors();
     h.find_cliques_from_scratch();
     println!("\n\nInitial Hypergraph with unspecified edges colored randomly");
@@ -97,7 +97,7 @@ fn main() {
   h.find_cliques_from_scratch();
   
   loop {
-    if randomize_edge_colors {
+    if any_unspecified_edges {
       h.randomize_edge_colors();
       //h.randomly_grow_a_clique();
     } else {
@@ -113,8 +113,8 @@ fn main() {
 
       // Try all alternate colors for the current edge
       for _ in 0..(color_ct - 1) {
-        //h.increment_edge_color(edge_index_to_try);
-        h.randomly_grow_a_clique();
+        h.increment_edge_color(edge_index_to_try);
+        //h.randomly_grow_a_clique();
         h.find_cliques_from_scratch();
         if h.maximal_color_clique_ct < best_from_current_start {
           if h.maximal_color_clique_ct < best_from_all_starts || 
@@ -195,8 +195,8 @@ impl HyperGraph {
     }
   }
   
-  fn get_key(&self, color: u8, order: u8) -> u8 {
-    color * self.graph_order + order
+  fn get_key(&self, color: u8, clique_order: u8) -> u8 {
+    color * self.graph_order + clique_order
   }
 
   fn randomize_edge_colors(&mut self) {
