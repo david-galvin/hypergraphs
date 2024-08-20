@@ -1,7 +1,8 @@
-//#![allow(dead_code)]
-//#![allow(unused_imports)]
-//#![allow(unused_variables)]
-//#![allow(unused_mut)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(unused_mut)]
+#![allow(unreachable_code)]
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::fmt;
@@ -82,11 +83,91 @@ fn main() {
 
   let mut loops_without_improvement: usize;
   let mut edge_index_to_try: usize = 0;
+  let mut key: u8;
+  let mut nonmembers: u64;
+  let mut vertex_to_add: u64;
+  let mut last_key_with_improvement: u8 = 0;
+  let mut color: u8;
+  let mut order: u8;
+  let mut index: usize;
+  let mut has_improved: bool;
+  let mut new_set_bit_getter = math::SetBitGetter::new();
   
   // INFINITE LOOP TO LOOK FOR BETTER COLORINGS
-  /*loop {
+  loop {
     h.randomize_edge_colors();
     h.find_cliques_from_scratch();
+    h.best_anneal_clique_count = h.current_clique_count;
+    if h.current_clique_count < h.best_global_clique_count {
+      h.best_global_clique_count = h.current_clique_count;
+    }
+
+    key = h.get_key(0, h.edge_order - 1);
+    
+    loop {
+      
+      if h.cliques.contains_key(&key) {
+        index = 0;
+        while index < h.cliques[&key].len() {
+          nonmembers = h.cliques[&key][index].members ^ ((1 << h.graph_order) - 1);
+          if nonmembers == 0 {
+            break;
+          }
+          
+          new_set_bit_getter.reset(nonmembers);
+          
+          while new_set_bit_getter.are_there_more_bits() {
+            has_improved = false;
+            vertex_to_add = new_set_bit_getter.get_bit();
+            h.grow_clique(key, index, vertex_to_add); 
+            h.find_cliques_from_scratch();
+            // check for a good result
+            if h.current_clique_count <= h.best_anneal_clique_count {
+              
+              //  WE HAVE IMPROVED GLOBALLY
+              if h.current_clique_count < h.best_global_clique_count || 
+              ((h.current_clique_count == h.best_global_clique_count) && h.current_clique_count <= h.upper_bound) {
+                
+                // print a good result
+                h.print_header();
+                h.best_global_clique_count = h.current_clique_count;
+                println!("{}", h);
+              }
+            }  
+                       
+            // WE HAVE IMPROVED ON THE BEST RESULT IN THIS ANNEALING
+            if h.current_clique_count < h.best_anneal_clique_count {
+              last_key_with_improvement = key;
+              h.best_anneal_clique_count = h.current_clique_count;
+              index = 0;
+              has_improved = true;
+              if index >= h.cliques[&key].len() {
+                break;
+              }
+            }
+
+            
+            // revert if we didn't improve on the current annealing's best
+            // TODO: SHOULD THIS BE RANDOM ON EQUALITY?
+            // WE HAVE NOT IMPROVED ON THE BEST RESULT IN THIS ANNEALING
+            if !has_improved {
+              h.revert_clique_growth();
+              h.find_cliques_from_scratch();
+            }
+          }
+          index += 1;
+        }
+      }
+      
+      // Update color & order; if we've cycled through everything without
+      // any improvement, break out so we can start over with a fresh random coloring
+      h.rotate_growth_key(&mut key);
+      if key == last_key_with_improvement {
+        break;
+        //return;
+      }
+    }
+
     
     // FOR EVERY CLIQUE
     //   FOR EVERY VERTEX NOT IN THAT CLIQUE
@@ -94,7 +175,8 @@ fn main() {
     //       BETTER: RECORD THE (CLIQUE, VERTEX),  AND CONTINUE UNTIL WE REACH IT AGAIN
     //       WORSE: REVERT THE ABSORPTION
     //       UNCH: TBD; MAYBE TREAT AS WORSE, MAYBE RANDOMLY FOLLOW ONE OF BETTER/WORSE WITH 50/50 PROBABILITY
-  }*/
+    h.print_annealing_status();
+  }
   
   
   
@@ -143,8 +225,11 @@ fn main() {
   }
 }
 
+
+
 struct HyperGraph {
   edges: Vec<Clique>,
+  edges_to_revert: Vec<(usize, u8)>, // (edge_index, color)
   cliques: FxHashMap<u8, Vec<Clique>>,
   members_of_nonmaximal_cliques: FxHashSet<u64>,
   current_clique_count: usize,
@@ -174,6 +259,7 @@ impl HyperGraph {
   
     HyperGraph {
       edges: Clique::generate_all_cliques(u8::MAX, edge_order, graph_order),
+      edges_to_revert: Vec::<(usize, u8)>::default(),
       cliques,
       members_of_nonmaximal_cliques: FxHashSet::<u64>::default(),
       current_clique_count: 0,
@@ -195,6 +281,18 @@ impl HyperGraph {
   
   fn get_key(&self, color: u8, clique_order: u8) -> u8 {
     color * self.graph_order + clique_order
+  }
+  
+  fn rotate_growth_key(&self, key: &mut u8) {
+    let color: u8 = (*key / self.graph_order + 1) % self.color_ct;
+    let mut clique_order: u8 = *key % self.graph_order;
+    if color == 0 {
+      clique_order += 1;
+      if clique_order > self.graph_order {
+        clique_order = self.edge_order - 1;
+      }
+    }
+    *key = self.get_key(color, clique_order);
   }
 
   fn randomize_edge_colors(&mut self) {
@@ -246,6 +344,28 @@ impl HyperGraph {
       if self.edges[i].members & mask == self.edges[i].members {
         self.edges[i].set_color(clique_to_grow.color);
       }
+    }
+  }
+  
+//  fn grow_clique(&mut self, clique_to_grow: &Clique, vertex: u64) {
+  fn grow_clique(&mut self, key: u8, index: usize, vertex: u64) {
+    // Recolor all edges whose vertices are all either our chosen
+    // vertex or our chosen clique with the clique's colors.
+    let color: u8 = self.cliques[&key][index].color;
+    let mask: u64 = self.cliques[&key][index].members | vertex;
+    self.edges_to_revert.clear();
+    for i in 0..=self.last_random_edge_index {
+      if self.edges[i].members & mask == self.edges[i].members
+      && self.edges[i].color != color {
+        self.edges_to_revert.push((i, self.edges[i].color));
+        self.edges[i].set_color(color);
+      }
+    } 
+  }
+  
+  fn revert_clique_growth(&mut self) {
+    for (i, color) in &self.edges_to_revert {
+      self.edges[*i].color = *color;
     }
   }
   
