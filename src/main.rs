@@ -103,7 +103,7 @@ fn main() {
     //h.randomly_grow_a_clique();
     
     h.find_cliques_from_scratch();
-    h.maximal_clique_count_prev_best_cur_annealing = h.maximal_clique_count_cur;
+    h.best_anneal_clique_count = h.current_clique_count;
 
     loops_without_improvement = 0;
     
@@ -115,16 +115,16 @@ fn main() {
         h.increment_edge_color(edge_index_to_try);
         //h.randomly_grow_a_clique();
         h.find_cliques_from_scratch();
-        if h.maximal_clique_count_cur < h.maximal_clique_count_prev_best_cur_annealing {
-          if h.maximal_clique_count_cur < h.maximal_clique_count_prev_best_all_annealings || 
-          ((h.maximal_clique_count_cur == h.maximal_clique_count_prev_best_all_annealings) && h.maximal_clique_count_cur <= h.upper_bound) {
+        if h.current_clique_count < h.best_anneal_clique_count {
+          if h.current_clique_count < h.best_global_clique_count || 
+          ((h.current_clique_count == h.best_global_clique_count) && h.current_clique_count <= h.upper_bound) {
             
             h.print_header();
-            h.maximal_clique_count_prev_best_all_annealings = h.maximal_clique_count_cur;
+            h.best_global_clique_count = h.current_clique_count;
             println!("{}", h);
           }
           loops_without_improvement = 0;
-          h.maximal_clique_count_prev_best_cur_annealing = h.maximal_clique_count_cur
+          h.best_anneal_clique_count = h.current_clique_count
         }
       }
       
@@ -145,9 +145,9 @@ struct HyperGraph {
   edges: Vec<Clique>,
   cliques: FxHashMap<u8, Vec<Clique>>,
   members_of_cliques_which_should_be_deactivated: FxHashSet<u64>,
-  maximal_clique_count_cur: usize,
-  maximal_clique_count_prev_best_cur_annealing: usize,
-  maximal_clique_count_prev_best_all_annealings: usize,
+  current_clique_count: usize,
+  best_anneal_clique_count: usize,
+  best_global_clique_count: usize,
   edge_order: u8,
   color_ct: u8,
   graph_order: u8,
@@ -174,9 +174,9 @@ impl HyperGraph {
       edges: Clique::generate_all_cliques(u8::MAX, edge_order, graph_order),
       cliques,
       members_of_cliques_which_should_be_deactivated: FxHashSet::<u64>::default(),
-      maximal_clique_count_cur: 0,
-      maximal_clique_count_prev_best_cur_annealing: usize::MAX,
-      maximal_clique_count_prev_best_all_annealings: usize::MAX,
+      current_clique_count: 0,
+      best_anneal_clique_count: usize::MAX,
+      best_global_clique_count: usize::MAX,
       edge_order,
       color_ct,
       graph_order,
@@ -210,7 +210,7 @@ impl HyperGraph {
   
   fn randomly_grow_a_clique(&mut self) {
 	  let mut clique_to_grow: &Clique = &self.util_clique; // A dummy until we find our clique
-    let clique_to_grow_indx: usize = fastrand::usize(0..self.maximal_clique_count_cur);
+    let clique_to_grow_indx: usize = fastrand::usize(0..self.current_clique_count);
     let mut vec_min_index: usize = 0;
     let mut vec_max_index: usize;
 	  for (_key, cliques_vec) in self.cliques.iter() {
@@ -256,14 +256,14 @@ impl HyperGraph {
   }
   
   fn add_clique(&mut self, clique: Clique) {
-    self.maximal_clique_count_cur += 1;
+    self.current_clique_count += 1;
     let key = self.get_key(clique.color, clique.order);
     self.confirm_cliques_vec_initialized(key);
     self.cliques.get_mut(&key).expect("Uninitalized Vector").push(clique);
   }
   
   fn add_clique_vec(&mut self, mut clique_vec: Vec<Clique>, key: u8) {
-    self.maximal_clique_count_cur += clique_vec.len();
+    self.current_clique_count += clique_vec.len();
     self.confirm_cliques_vec_initialized(key);
     self.cliques.get_mut(&key).expect("Uninitalized Vector").append(&mut clique_vec);
   }
@@ -292,7 +292,7 @@ impl HyperGraph {
         self.members_of_cliques_which_should_be_deactivated.remove(&self.cliques[&key_small][i].members);
         self.cliques.get_mut(&key_small).expect("Uninitalized Vector").swap_remove(i);
         num_cliques -= 1;
-        self.maximal_clique_count_cur -= 1;
+        self.current_clique_count -= 1;
       } else {
         i += 1;
       }
@@ -302,7 +302,7 @@ impl HyperGraph {
   
   fn find_cliques_from_scratch(&mut self) {
     self.cliques.clear();
-    self.maximal_clique_count_cur = 0;
+    self.current_clique_count = 0;
     
     let mut new_cliques = Vec::<Clique>::new();
     let mut key_small_cliques: u8;
@@ -372,8 +372,8 @@ impl HyperGraph {
     println!(
       "\n------------------------------------------\n\n{}.\n\nIMPROVEMENT: {} -> {}. Annealings: {}, Time: {:?}", 
       self.theorem, 
-      self.maximal_clique_count_prev_best_all_annealings, 
-      self.maximal_clique_count_cur,
+      self.best_global_clique_count, 
+      self.current_clique_count,
       self.annealing_count,
       self.timer.elapsed()
     );
@@ -405,7 +405,7 @@ impl HyperGraph {
       self.edge_order, 
       self.graph_order, 
       self.color_ct,
-      self.maximal_clique_count_cur,
+      self.current_clique_count,
       self.graph_size);
       
     // Printing edges is too noisy!  
@@ -448,7 +448,7 @@ impl HyperGraph {
         }
       }
     }
-    ret_str += &format!("\n  {} Maximal Color Cliques Found. Vertices on few cliques: (", self.maximal_clique_count_cur);
+    ret_str += &format!("\n  {} Maximal Color Cliques Found. Vertices on few cliques: (", self.current_clique_count);
     for color in 0..self.color_ct {
       let mut min_count = self.graph_order;
       for i in (color * self.graph_order)..((color + 1) * self.graph_order) {
