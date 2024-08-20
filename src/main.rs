@@ -115,7 +115,7 @@ fn main() {
         h.increment_edge_color(edge_index_to_try);
         //h.randomly_grow_a_clique();
         h.find_cliques_from_scratch();
-        if h.current_clique_count <= h.best_anneal_clique_count {
+        if h.current_clique_count < h.best_anneal_clique_count {
           if h.current_clique_count < h.best_global_clique_count || 
           ((h.current_clique_count == h.best_global_clique_count) && h.current_clique_count <= h.upper_bound) {
             
@@ -144,7 +144,7 @@ fn main() {
 struct HyperGraph {
   edges: Vec<Clique>,
   cliques: FxHashMap<u8, Vec<Clique>>,
-  members_of_nonmaximal_cliques: FxHashSet<u64>,
+  members_of_cliques_which_should_be_deactivated: FxHashSet<u64>,
   current_clique_count: usize,
   best_anneal_clique_count: usize,
   best_global_clique_count: usize,
@@ -173,7 +173,7 @@ impl HyperGraph {
     HyperGraph {
       edges: Clique::generate_all_cliques(u8::MAX, edge_order, graph_order),
       cliques,
-      members_of_nonmaximal_cliques: FxHashSet::<u64>::default(),
+      members_of_cliques_which_should_be_deactivated: FxHashSet::<u64>::default(),
       current_clique_count: 0,
       best_anneal_clique_count: usize::MAX,
       best_global_clique_count: usize::MAX,
@@ -279,7 +279,7 @@ impl HyperGraph {
     for big_clique in &self.cliques[&key_big] {
       self.set_bit_getter.reset(big_clique.members);
       while self.set_bit_getter.are_there_more_bits() {
-        self.members_of_nonmaximal_cliques.insert(big_clique.members ^ self.set_bit_getter.get_bit());
+        self.members_of_cliques_which_should_be_deactivated.insert(big_clique.members ^ self.set_bit_getter.get_bit());
       }
     }
 
@@ -288,8 +288,8 @@ impl HyperGraph {
     let mut num_cliques: usize = self.cliques[&key_small].len();
     let mut i = 0;
     while i < num_cliques {
-      if self.members_of_nonmaximal_cliques.contains(&self.cliques[&key_small][i].members) {
-        self.members_of_nonmaximal_cliques.remove(&self.cliques[&key_small][i].members);
+      if self.members_of_cliques_which_should_be_deactivated.contains(&self.cliques[&key_small][i].members) {
+        self.members_of_cliques_which_should_be_deactivated.remove(&self.cliques[&key_small][i].members);
         self.cliques.get_mut(&key_small).expect("Uninitalized Vector").swap_remove(i);
         num_cliques -= 1;
         self.current_clique_count -= 1;
