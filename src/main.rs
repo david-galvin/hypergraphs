@@ -90,12 +90,9 @@ fn main() {
   
   
   loop {
-    if any_unspecified_edges {
-      h.randomize_edge_colors();
-      //h.randomly_grow_a_clique();
-    } else {
-      break;
-    }
+    h.randomize_edge_colors();
+    //h.randomly_grow_a_clique();
+    
     h.find_cliques_from_scratch();
     best_from_current_start = h.maximal_color_clique_ct;
 
