@@ -1,7 +1,7 @@
-// #![allow(dead_code)]
-// #![allow(unused_imports)]
-// #![allow(unused_variables)]
-// #![allow(unused_mut)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(unused_mut)]
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::fmt;
@@ -67,34 +67,27 @@ fn main() {
     arg_index += 1;
   }
   
-  // IF ANY EDGE COLORS WERE UNSPECIFIED, WE WILL SEARCH FOR IMPROVEMENTS
-  let any_unspecified_edges: bool;
-  if edge_index_left == 0 {
-    any_unspecified_edges = false;
+  // WERE ANY EDGE COLORS UNSPECIFIED?
+  let any_unspecified_edges: bool = edge_index_left > 0;
+  
+  // IF ALL EDGE COLORS WERE SPECIFIED, PRINT THE GRAPH AND EXIT
+  if !any_unspecified_edges {
     h.find_cliques_from_scratch();
     println!("\n\nInput Hypergraph had all edge colors specified:");
     println!("{}", h);
+    return;
   } else {
+    // OTHERWISE SAVE THE INDEX OF THE LAST UNSPECIFIED EDGE
     h.last_random_edge_index = edge_index_left - 1;
-    any_unspecified_edges = true;
   }
-  
-  // Regardless of future changes, initially randomize all unspecified edges.
-  if any_unspecified_edges {
-    h.randomize_edge_colors();
-    h.find_cliques_from_scratch();
-    println!("\n\nInitial Hypergraph with unspecified edges colored randomly");
-    println!("{}", h);
-  }
-  
-  
+
+
   let mut loops_without_improvement: usize;
   let mut edge_index_to_try: usize = 0;
   let mut best_from_current_start: usize;
   let mut best_from_all_starts: usize = usize::MAX;
   let mut annealing_count: usize = 0;
   
-  h.find_cliques_from_scratch();
   
   loop {
     if any_unspecified_edges {
