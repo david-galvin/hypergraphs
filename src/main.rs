@@ -66,10 +66,10 @@ fn main() {
   }
   
   // WERE ANY EDGE COLORS UNSPECIFIED?
-  let any_unspecified_edges: bool = edge_index_left > 0;
+  let has_unspecified_edges: bool = edge_index_left > 0;
   
   // IF ALL EDGE COLORS WERE SPECIFIED, PRINT THE GRAPH AND EXIT
-  if !any_unspecified_edges {
+  if !has_unspecified_edges {
     h.find_cliques_from_scratch();
     println!("\n\nInput Hypergraph had all edge colors specified:");
     println!("{}", h);
@@ -268,7 +268,7 @@ impl HyperGraph {
     self.cliques.get_mut(&key).expect("Uninitalized Vector").append(&mut clique_vec);
   }
   
-  fn mark_nonmaximal_cliques_inactive(&mut self, color: u8, order_of_larger_clique: u8) {
+  fn deactivate_subcliques(&mut self, color: u8, order_of_larger_clique: u8) {
     let key_big = self.get_key(color, order_of_larger_clique);
     if !&self.cliques.contains_key(&key_big) {
       return;
@@ -304,7 +304,7 @@ impl HyperGraph {
     self.cliques.clear();
     self.maximal_clique_count_cur = 0;
     
-    let mut cliques_to_add = Vec::<Clique>::new();
+    let mut new_cliques = Vec::<Clique>::new();
     let mut key_small_cliques: u8;
 
     for color in 0..self.color_ct {
@@ -328,7 +328,7 @@ impl HyperGraph {
         
       
       // Mark fully contained trivial color-cliques as inactive (aka non-maximal)  
-      self.mark_nonmaximal_cliques_inactive(color, self.edge_order);
+      self.deactivate_subcliques(color, self.edge_order);
        
       // 'smaller_cliques' refers to all cliques that match the color
       // we're examining, and have (order-1) vertices.
@@ -347,23 +347,23 @@ impl HyperGraph {
           break;
         }
 
-        cliques_to_add.clear(); // Clear previous cliques
+        new_cliques.clear(); // Clear previous cliques
 
         let expansions = math::get_expansions(&smaller_cliques.iter().map(|c| c.members).collect(), self.graph_order as u64);
         
         for candidate in expansions {
-          cliques_to_add.push(Clique::new(candidate, color, self.graph_order));
+          new_cliques.push(Clique::new(candidate, color, self.graph_order));
         }
 
 
-        // Move cliques_to_add into add_clique
-        while let Some(clique) = cliques_to_add.pop() {
+        // Move new_cliques into add_clique
+        while let Some(clique) = new_cliques.pop() {
           self.add_clique(clique);
         }
 
 
         // Having finished finding color-order cliques, mark any nonmaximal smaller cliques as inactive
-        self.mark_nonmaximal_cliques_inactive(color, order);
+        self.deactivate_subcliques(color, order);
       }
     }
   }
