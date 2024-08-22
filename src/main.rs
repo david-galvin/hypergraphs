@@ -78,6 +78,8 @@ fn main() {
   } else {
     // OTHERWISE SAVE THE INDEX OF THE LAST UNSPECIFIED EDGE
     h.last_random_edge_index = edge_index_left - 1;
+    h.randomize_edge_colors();
+    h.find_cliques_from_scratch();
   }
 
 
@@ -92,9 +94,10 @@ fn main() {
   let mut index: usize;
   let mut has_improved: bool;
   let mut new_set_bit_getter = math::SetBitGetter::new();
+  let mut skip_reset: bool = false;
   
   // INFINITE LOOP TO LOOK FOR BETTER COLORINGS
-  loop {
+  /*loop {
     h.randomize_edge_colors();
     h.find_cliques_from_scratch();
     h.best_anneal_clique_count = h.current_clique_count;
@@ -137,7 +140,16 @@ fn main() {
                        
             // WE HAVE IMPROVED ON THE BEST RESULT IN THIS ANNEALING
             if h.current_clique_count < h.best_anneal_clique_count {
-              last_key_with_improvement = key;
+              
+              
+              
+              // TEMP TEMP TEST TEST TES TRY RESETTING KEY
+              key = h.get_key(0, h.edge_order - 1);
+              skip_reset = true;
+              last_key_with_improvement = h.get_key(0, h.edge_order - 1);
+              //last_key_with_improvement = key;
+              
+              
               h.best_anneal_clique_count = h.current_clique_count;
               index = 0;
               has_improved = true;
@@ -152,6 +164,7 @@ fn main() {
             // WE HAVE NOT IMPROVED ON THE BEST RESULT IN THIS ANNEALING
             if !has_improved {
               h.revert_clique_growth();
+              // TODO FIND A WAY NOT TO find_clique() here!!!
               h.find_cliques_from_scratch();
             }
           }
@@ -163,8 +176,12 @@ fn main() {
       // any improvement, break out so we can start over with a fresh random coloring
       h.rotate_growth_key(&mut key);
       if key == last_key_with_improvement {
-        break;
-        //return;
+        if skip_reset {
+          skip_reset = false;
+        } else { 
+          break;
+          //return;
+        }
       }
     }
 
@@ -176,13 +193,13 @@ fn main() {
     //       WORSE: REVERT THE ABSORPTION
     //       UNCH: TBD; MAYBE TREAT AS WORSE, MAYBE RANDOMLY FOLLOW ONE OF BETTER/WORSE WITH 50/50 PROBABILITY
     h.print_annealing_status();
-  }
+  }*/
   
   
   
   loop {
-    h.randomize_edge_colors();
-    //h.randomly_grow_a_clique();
+    //h.randomize_edge_colors();
+    h.randomly_grow_a_clique();
     
     h.find_cliques_from_scratch();
     h.best_anneal_clique_count = h.current_clique_count;
@@ -222,6 +239,7 @@ fn main() {
     }
     
     h.print_annealing_status();
+    h.annealing_count += 1;
   }
 }
 
@@ -522,6 +540,8 @@ impl HyperGraph {
   fn get_string(&self) -> String {
     let mut vertex_clique_counts: Vec<u8> = vec![0; (self.color_ct * self.graph_order) as usize];
     let mut cliques_str = format!("  cargo run --release {} {} {}", self.edge_order, self.color_ct, self.graph_order);
+    let mut color_clique_count: usize;
+    let mut color_clique_str = format!("color clique counts: ");
     let mut ret_str = format!(
       "\nH: A complete {}-uniform hypergraph on {} vertices with {} colors, {} cliques, {} edges\n", 
       self.edge_order, 
@@ -537,6 +557,7 @@ impl HyperGraph {
 
     ret_str += "\nMaximal Color-Cliques\n";
     for color in 0..self.color_ct {
+      color_clique_count = 0;
       ret_str += &format!("  color {}:\n", color);
       let mut first_of_color: bool = true;
       for order in (self.edge_order - 1)..(self.graph_order + 1) {
@@ -546,6 +567,7 @@ impl HyperGraph {
           continue;
         }
         for clique in &self.cliques[&self.get_key(color, order)] {
+          color_clique_count += 1;
           if order >= self.edge_order {
             if first_of_color {
               cliques_str += " ";
@@ -569,8 +591,10 @@ impl HyperGraph {
           ret_str += &order_str;
         }
       }
+      color_clique_str += &format!(" ({}: {})", color, color_clique_count);
     }
     ret_str += &format!("\n  {} Maximal Color Cliques Found. Vertices on few cliques: (", self.current_clique_count);
+    
     for color in 0..self.color_ct {
       let mut min_count = self.graph_order;
       for i in (color * self.graph_order)..((color + 1) * self.graph_order) {
@@ -584,7 +608,9 @@ impl HyperGraph {
       }
     }
     ret_str += ")\n";
+    ret_str += &format!("  {}\n\n",color_clique_str);
     ret_str += &cliques_str;
+    ret_str += "\n";
     ret_str
   }
 }
