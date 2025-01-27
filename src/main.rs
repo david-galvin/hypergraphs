@@ -37,7 +37,7 @@ fn main() {
   
   // ARGS 2: PARSE BASIC ARGS
   let edge_order: u8 = args[1].parse().unwrap();  // The number of vertices that define an edge. Normal graphs have edge_order = 2.
-  let color_count: u8 = args[2].parse().unwrap();    // The number of colors, which are integers: 0, 1, ..., color_count - 1.
+  let color_count: u8 = args[2].parse().unwrap(); // The number of colors, which are integers: 0, 1, ..., color_count - 1.
   let graph_order: u8 = args[3].parse().unwrap(); // The number of vertices in the graph.
   
   // CREATE HYPERGRAPH
@@ -46,7 +46,7 @@ fn main() {
   // ARGS 3: PARSE CLIQUE CSV ARGS
   let mut arg_index: usize = 4;
   let mut edge_index_right: usize = h.graph_size; // refers to the left-most edge with color
-  let mut edge_index_left: usize = h.graph_size; // refers to the left-most edge not yet checked for color
+  let mut edge_index_left: usize = h.graph_size;  // refers to the left-most edge not yet checked for color
   let mut color: u8;
   while args.len() > arg_index {
     color = (arg_index - 4) as u8;
@@ -139,7 +139,7 @@ fn main() {
               }
             }  
                        
-            // WE HAVE IMPROVED ON THE BEST RESULT IN THIS ANNEALING
+            // IF WE HAVE IMPROVED ON THE BEST RESULT IN THIS ANNEALING
             if h.current_clique_count < h.best_anneal_clique_count {
               last_key_with_improvement = key;
               h.best_anneal_clique_count = h.current_clique_count;
@@ -148,13 +148,12 @@ fn main() {
               if index >= h.cliques[&key].len() {
                 break;
               }
-            }
-
             
-            // revert if we didn't improve on the current annealing's best
-            // TODO: SHOULD THIS BE RANDOM ON EQUALITY?
-            // WE HAVE NOT IMPROVED ON THE BEST RESULT IN THIS ANNEALING
-            if !has_improved {
+            // IF WE HAVE ***NOT*** IMPROVED ON THE BEST RESULT IN THIS ANNEALING
+            } else {
+            
+            
+              // REVERT
               h.revert_clique_growth();
               // TODO FIND A WAY NOT TO find_clique() here!!!
               h.find_cliques_from_scratch();
@@ -895,12 +894,12 @@ fn get_upper_bound(n: u8, r: u8, t: u8) -> (usize, String) { // (bound, theorem,
 
   // Theorem 25
   if r == 2 && t == 4 {
-    let n_mod_3 = n % 3;
-    if n_mod_3 == 1 {
+    let n_mod_8 = n % 8;
+    if n_mod_8 == 1 {
       cur_upper_bound = n + 3;
-    } else if n_mod_3 == 0 {
+    } else if n_mod_8 == 0 {
       cur_upper_bound = n + 4;
-    } else if n_mod_3 == 2 || n_mod_3 == 6 || n_mod_3 == 7 {
+    } else if n_mod_8 == 2 || n_mod_8 == 6 || n_mod_8 == 7 {
       cur_upper_bound = n + 5;
     } else {
       cur_upper_bound = n + 6;
